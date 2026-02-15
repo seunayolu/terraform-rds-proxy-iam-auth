@@ -1,0 +1,165 @@
+name: "Terraform Infrastructure Pipeline"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Terraform/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Terraform/**'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write # Required for posting PR comments
+
+jobs:
+  terraform_plan:
+    name: "Terraform Plan & Security Scan"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: Terraform/
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: Terraform/
+
+      - name: TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.52.0
+
+      - name: Run TFLint
+        run: tflint -f compact
+        working-directory: Terraform/
+
+      - name: Checkov GitHub Action
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: Terraform/
+          framework: terraform
+          soft_fail: true # Set to false to block PRs on security fails
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        working-directory: Terraform/
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan
+          path: Terraform/tfplan
+
+      - name: Comment PR with Plan
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan 📖
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+        env:
+          PLAN: "${{ steps.plan.outputs.stdout }}"
+
+  terraform_apply:
+    name: "Terraform Apply"
+    needs: terraform_plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: Terraform/
+
+      - name: Download Plan artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: tfplan
+          path: Terraform/
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve -no-color Terraform/tfplan > apply_output.txt
+        working-directory: Terraform/
+
+      - name: Upload Apply Output
+        uses: actions/upload-artifact@v6
+        with:
+          name: terraform-apply-output
+          path: apply_output.txt
+
+  terraform_destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' # Manual trigger only for safety
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: Terraform/
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
+        working-directory: Terraform/
