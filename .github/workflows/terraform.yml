@@ -11,11 +11,12 @@ on:
       - main
     paths:
       - 'Terraform/**'
+  workflow_dispatch: 
 
 permissions:
   contents: read
   id-token: write
-  pull-requests: write # Required for posting PR comments
+  pull-requests: write 
 
 jobs:
   terraform_plan:
