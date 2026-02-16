@@ -16,7 +16,12 @@ on:
 permissions:
   contents: read
   id-token: write
-  pull-requests: write 
+  pull-requests: write
+  security-events: write
+
+defaults:
+    run:
+        working-directory: Terraform/
 
 jobs:
   terraform_plan:
@@ -41,11 +46,9 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: Terraform/
 
       - name: Terraform Validate
         run: terraform validate
-        working-directory: Terraform/
 
       - name: TFLint
         uses: terraform-linters/setup-tflint@v6
@@ -54,21 +57,33 @@ jobs:
 
       - name: Run TFLint
         run: tflint -f compact
-        working-directory: Terraform/
 
       - name: Checkov GitHub Action
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: Terraform/
+          directory: .
           framework: terraform
-          soft_fail: true # Set to false to block PRs on security fails
+          soft_fail: true
           output_format: cli,sarif
           output_file_path: console,results.sarif
+
+      - name: Archive Checkov SARIF Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+            name: checkov-sarif-report
+            path: Terraform/results.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: Terraform/results.sarif
+          category: checkov
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -out=tfplan
-        working-directory: Terraform/
 
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v6
@@ -120,7 +135,6 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: Terraform/
 
       - name: Download Plan artifact
         uses: actions/download-artifact@v6
@@ -130,19 +144,18 @@ jobs:
 
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve -no-color Terraform/tfplan > apply_output.txt
-        working-directory: Terraform/
+        run: terraform apply -auto-approve -no-color tfplan > apply_output.txt
 
       - name: Upload Apply Output
         uses: actions/upload-artifact@v6
         with:
           name: terraform-apply-output
-          path: apply_output.txt
+          path: Terraform/apply_output.txt
 
   terraform_destroy:
     name: "Terraform Destroy"
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' # Manual trigger only for safety
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -158,8 +171,6 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: Terraform/
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
-        working-directory: Terraform/
