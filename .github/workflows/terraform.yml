@@ -61,7 +61,7 @@ jobs:
       - name: Checkov GitHub Action
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: .
+          directory: Terraform/
           framework: terraform
           soft_fail: true
           output_format: cli,sarif
@@ -72,13 +72,13 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
             name: checkov-sarif-report
-            path: Terraform/results.sarif
+            path: results.sarif
 
       - name: Upload SARIF to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: Terraform/results.sarif
+          sarif_file: results.sarif
           category: checkov
 
       - name: Terraform Plan

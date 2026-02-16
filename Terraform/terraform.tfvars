@@ -15,7 +15,7 @@ db_iam_auth_user  = "node_user"
 # EC2 Variables
 app_port      = 3000
 https_port    = 443
-instance_type = "t5.micro"
+instance_type = "t3.micro"
 volume_size   = 10
 volume_type   = "gp3"
 
