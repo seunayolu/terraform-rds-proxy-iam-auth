@@ -95,5 +95,5 @@ output "alb_target_group_arn" {
 
 output "rds_db_name" {
   description = "RDS DB Name"
-  value = module.rds.rds_db_name
+  value       = module.rds.rds_db_name
 }
