@@ -32,3 +32,8 @@ output "rds_proxy_endpoint" {
   description = "RDS Proxy ARN"
   value       = aws_db_proxy.devdb_proxy.endpoint
 }
+
+output "rds_db_name" {
+  description = "RDS DB Name"
+  value       = aws_ssm_parameter.db_name.name
+}

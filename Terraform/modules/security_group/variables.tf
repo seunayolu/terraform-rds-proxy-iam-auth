@@ -23,6 +23,11 @@ variable "https_port" {
   type        = string
 }
 
+variable "http_port" {
+  description = "HTTPS Port"
+  type        = string
+}
+
 variable "default_route" {
   description = "Default route"
   type        = string

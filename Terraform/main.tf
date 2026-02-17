@@ -22,6 +22,7 @@ module "security_group" {
   rds_port      = module.rds.rds_port
   app_port      = var.app_port
   https_port    = var.https_port
+  http_port     = var.http_port
   default_route = var.default_route
 }
 
@@ -60,9 +61,37 @@ module "ec2" {
   project_name         = var.project_name
   environment          = var.environment
   iam_instance_profile = module.iam.ec2_instance_profile_name
-  subnet_id            = module.vpc.public_subnet_ids[0]
+  subnet_id            = module.vpc.private_subnet_ids[0]
   security_group_ids   = [module.security_group.ec2_sg_id]
   instance_type        = var.instance_type
   volume_size          = var.volume_size
   volume_type          = var.volume_type
+}
+
+module "s3" {
+  source = "./modules/s3"
+
+  project_name = var.project_name
+  environment  = var.environment
+  bucket_name  = var.bucket_name
+}
+
+module "alb" {
+  source = "./modules/alb"
+
+  project_name        = var.project_name
+  environment         = var.environment
+  vpc_id              = module.vpc.vpc_id
+  subnet_ids          = module.vpc.public_subnet_ids
+  alb_security_groups = [module.security_group.alb_sg_id]
+  target_type         = var.target_type
+  app_port            = var.app_port
+  https_port          = var.https_port
+  http_port           = var.http_port
+  ssl_policy          = var.ssl_policy
+  domain_name         = var.domain_name
+  s3_alb_logs         = module.s3.bucket_name
+  loadbalancer_type   = var.loadbalancer_type
+  instance_id         = module.ec2.instance_id
+
 }

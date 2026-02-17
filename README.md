@@ -58,3 +58,54 @@ A core highlight of this project is the resolution of a documented contradiction
 
 * **The 80/20 Rule:** 80% of DevOps is navigating the nuances of API behavior; 20% is writing the actual code.
 * **Provider Quirk:** The `aws_db_proxy` resource ID in Terraform returns the *name*, but IAM policies require the *Resource ID*. This project uses `split()` and `element()` functions to dynamically extract the correct ID from the ARN.
+
+## ALB Logging to S3
+- https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
+- https://docs.aws.amazon.com/elasticloadbalancing/latest/application/describe-ssl-policies.html
+- https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-creating.html
+- https://github.com/hashicorp/terraform-provider-aws/issues/46461
+- https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_ModifyLoadBalancerAttributes.html
+
+### SSM Start Session
+```bash
+aws ssm start-session \
+    --target i-0123456789abcdef \
+    --document-name AWS-StartInteractiveCommand \
+    --parameters 'command=["bash -l"]'
+```
+
+### CREATE DB User with AWSAuthPlugin
+```bash
+-- Create a database user that uses AWS IAM authentication and mandates SSL
+CREATE USER 'app_user'@'%' 
+IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
+
+-- Require SSL for this specific user
+ALTER USER 'app_user'@'%' REQUIRE SSL;
+
+-- Grant necessary privileges
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE ON rds_app_db.* TO 'app_user'@'%';
+
+-- Verify the user setup (now checking for SSL requirement)
+SELECT User, Host, plugin, ssl_type 
+FROM mysql.user 
+WHERE User = 'app_user';
+```
+### Generate RDS IAM Auth Token for Proxy Connection
+```bash
+aws rds generate-db-auth-token \
+    --hostname <proxy-endpoint> \
+    --port 3306 \
+    --region <rds_proxy_region> \
+    --username <rds_db_username_with_auth_plugin>
+```
+### SSM Start Port Forwarding Session to Remote Host
+```bash
+aws ssm start-session \
+    --target instance-id \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters '{"host":["mydb.example.us-east-2.rds.amazonaws.com"],"portNumber":["3306"], "localPortNumber":["3306"]}'
+```
+
+
+

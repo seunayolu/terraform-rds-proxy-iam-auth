@@ -58,6 +58,11 @@ variable "https_port" {
   type        = string
 }
 
+variable "http_port" {
+  description = "HTTPS Port"
+  type        = string
+}
+
 variable "default_route" {
   description = "default"
   type        = string
@@ -90,5 +95,30 @@ variable "volume_type" {
 
 variable "instance_type" {
   description = "EC2 instance type"
+  type        = string
+}
+
+variable "bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
+}
+
+variable "ssl_policy" {
+  description = "ALB SSL Policy"
+  type        = string
+}
+
+variable "loadbalancer_type" {
+  description = "ELB Type"
+  type        = string
+}
+
+variable "target_type" {
+  description = "Target Type for EC2 Target Group"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "value"
   type        = string
 }
