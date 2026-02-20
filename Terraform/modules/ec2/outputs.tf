@@ -3,9 +3,9 @@ output "instance_id" {
   value       = aws_instance.node_app_instance.id
 }
 
-output "instance_public_ip" {
+output "instance_private_ip" {
   description = "EC2 Instance Public IP"
-  value       = aws_instance.node_app_instance.public_ip
+  value       = aws_instance.node_app_instance.private_ip
 }
 
 output "instance_ami" {

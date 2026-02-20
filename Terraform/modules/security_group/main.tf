@@ -18,6 +18,16 @@ resource "aws_vpc_security_group_ingress_rule" "rds_ingress_rule" {
   referenced_security_group_id = aws_security_group.rds_proxy_sg.id
 }
 
+resource "aws_vpc_security_group_ingress_rule" "rds_cloudshell_ingress" {
+  security_group_id = aws_security_group.rds_sg.id
+
+  from_port                    = var.rds_port
+  to_port                      = var.rds_port
+  ip_protocol                  = "tcp"
+  description                  = "Allow Incoming request on 3306 from Cloudshell"
+  referenced_security_group_id = aws_security_group.cloudshell_sg.id
+}
+
 resource "aws_security_group" "rds_proxy_sg" {
   name        = "RDSPROXYSG"
   description = "RDS Proxy Security Group"
@@ -126,4 +136,22 @@ resource "aws_vpc_security_group_egress_rule" "alb_egress_ec2" {
   ip_protocol                  = "tcp"
   description                  = "Allow Outgoing request to EC2 Instance App Port"
   referenced_security_group_id = aws_security_group.ec2_instance_sg.id
+}
+
+resource "aws_security_group" "cloudshell_sg" {
+  name        = "Cloudshell Security Group"
+  description = "Allow Egress on port rds_port to RDS instance"
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name = "${var.project_name}-CS-SG"
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "cloudshell_egress" {
+  security_group_id = aws_security_group.cloudshell_sg.id
+
+  ip_protocol = -1
+  description = "Allow Outgoing request to default route"
+  cidr_ipv4   = var.default_route
 }
