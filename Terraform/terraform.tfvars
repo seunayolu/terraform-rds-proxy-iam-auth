@@ -36,3 +36,6 @@ domain_name       = "teachdev.online"
 target_type       = "instance"
 loadbalancer_type = "application"
 
+# ECR variables
+repo_name = "nodeapp"
+

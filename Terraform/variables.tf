@@ -122,3 +122,8 @@ variable "domain_name" {
   description = "value"
   type        = string
 }
+
+variable "repo_name" {
+  description = "ECR Repo Name"
+  type        = string
+}

@@ -161,7 +161,10 @@ jobs:
   build-and-scan:
     name: "Build & Scan Image"
     needs: [terraform_plan, terraform_apply]
-    if: always() && (needs.terraform_plan.result == 'success' || needs.terraform_apply.result == 'success')
+    if: | 
+      always() && 
+      (needs.terraform_plan.result == 'success') &&
+      (needs.terraform_apply.result == 'success'|| needs.terraform_apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -180,14 +183,14 @@ jobs:
       - name: Build and tag image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name }}
+          ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
 
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ needs.terraform_apply.outputs.ecr_repo_name}}:${{ github.sha }}
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'

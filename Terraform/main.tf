@@ -60,6 +60,7 @@ module "ecr" {
 
   project_name = var.project_name
   environment  = var.environment
+  repo_name    = var.repo_name
 }
 
 # module "ec2" {
