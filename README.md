@@ -107,5 +107,9 @@ aws ssm start-session \
     --parameters '{"host":["mydb.example.us-east-2.rds.amazonaws.com"],"portNumber":["3306"], "localPortNumber":["3306"]}'
 ```
 
+```bash
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 442042522885.dkr.ecr.us-east-1.amazonaws.com
+```
+
 
 

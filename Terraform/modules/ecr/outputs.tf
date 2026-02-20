@@ -1,6 +1,6 @@
-output "registry" {
-  description = "ECR Registry"
-  value       = aws_ecr_repository.node_app.registry_id
+output "repository_url" {
+  description = "ECR Repository URL"
+  value       = aws_ecr_repository.node_app.repository_url
 }
 
 output "ecr_repo_name" {
