@@ -237,6 +237,8 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: Terraform/
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
+        working-directory: Terraform/
