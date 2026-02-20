@@ -47,14 +47,17 @@ jobs:
         working-directory: Terraform/
       
       - name: TFLint
+        if: github.event_name == 'pull_request'
         uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: v0.52.0
       
       - name: Run TFLint
+        if: github.event_name == 'pull_request'
         run: tflint -f compact
 
       - name: Checkov Static Analysis
+        if: github.event_name == 'pull_request'
         uses: bridgecrewio/checkov-action@master
         with:
           directory: Terraform/
@@ -64,7 +67,7 @@ jobs:
           output_file_path: console,results.sarif
       
       - name: Archive Checkov SARIF Results
-        if: always()
+        if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v6
         with:
             name: checkov-sarif-report
@@ -137,7 +140,7 @@ jobs:
           path: Terraform/
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve tfplan > apply_output.txt
         working-directory: Terraform/
       
       - name: Upload Apply Output
@@ -168,16 +171,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v6
-      #   with:
-      #     role-to-assume: ${{ secrets.ROLE_ARN }}
-      #     aws-region: ${{ vars.AWS_REGION }}
-
-      # - name: Login to Amazon ECR
-      #   id: login-ecr
-      #   uses: aws-actions/amazon-ecr-login@v2
-
       - name: Build and tag image
         run: |
           docker build -t nodeapp:${{ github.sha }} .
@@ -189,7 +182,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
-          exit-code: '0' # Don't fail the pipeline
+          exit-code: '0'
       
       - name: Upload Trivy scan
         uses: actions/upload-artifact@v6
