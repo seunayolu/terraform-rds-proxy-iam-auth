@@ -68,9 +68,9 @@ output "ecr_repo_name" {
   value       = module.ecr.ecr_repo_name
 }
 
-output "registry" {
+output "repository_url" {
   description = "ECR Registry"
-  value       = module.ecr.registry
+  value       = module.ecr.repository_url
 }
 
 output "ec2_instance_profile_name" {

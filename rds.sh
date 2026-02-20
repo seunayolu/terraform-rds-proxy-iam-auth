@@ -71,8 +71,8 @@ mysql -h "$RDS_ENDPOINT" --user="$IAM_ADMIN_USER" --password="$TOKEN" --ssl-ca="
 CREATE USER IF NOT EXISTS 'node_app'@'%' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
 CREATE USER IF NOT EXISTS 'node_user'@'%' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_app'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_user'@'%';
+GRANT SELECT, CREATE, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_app'@'%';
+GRANT SELECT, CREATE, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_user'@'%';
 
 FLUSH PRIVILEGES;
 EOF
