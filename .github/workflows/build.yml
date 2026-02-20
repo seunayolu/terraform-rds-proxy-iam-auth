@@ -1,0 +1,231 @@
+name: "DevSecOps Infrastructure & App Pipeline"
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Terraform/**'
+      - 'src/**'
+      - 'Dockerfile'
+  push:
+    branches: [ main ]
+    paths:
+      - 'Terraform/**'
+      - 'src/**'
+      - 'Dockerfile'
+  workflow_dispatch: 
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  terraform_plan:
+    name: "Terraform Plan & Security Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: Terraform/
+
+      - name: Terraform validate
+        run: terraform validate
+        working-directory: Terraform/
+      
+      - name: TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.52.0
+      
+      - name: Run TFLint
+        run: tflint -f compact
+
+      - name: Checkov Static Analysis
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: Terraform/
+          framework: terraform
+          soft_fail: true
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+      
+      - name: Archive Checkov SARIF Results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+            name: checkov-sarif-report
+            path: results.sarif
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        working-directory: Terraform/
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan
+          path: Terraform/tfplan
+      
+      - name: Comment PR with Plan
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan 📖
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+        env:
+          PLAN: "${{ steps.plan.outputs.stdout }}"
+
+  terraform_apply:
+    name: "Terraform Apply"
+    needs: terraform_plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      ecr_repo_name: ${{ steps.set_output.outputs.repo_name }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: Terraform/
+
+      - name: Download Plan
+        uses: actions/download-artifact@v6
+        with:
+          name: tfplan
+          path: Terraform/
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: Terraform/
+      
+      - name: Upload Apply Output
+        uses: actions/upload-artifact@v6
+        with:
+          name: terraform-apply-output
+          path: Terraform/apply_output.txt
+      
+      - name: Upload RDS connection configuration
+        uses: actions/upload-artifact@v6
+        with:
+          name: rds-config
+          path: Terraform/rds.conf
+
+      - name: Extract ECR Repo Name
+        id: set_output
+        run: |
+          REPO=$(terraform output -raw ecr_repo_name)
+          echo "repo_name=$REPO" >> $GITHUB_OUTPUT
+        working-directory: Terraform/
+
+  build-and-scan:
+    name: "Build & Scan Image"
+    needs: [terraform_plan, terraform_apply]
+    if: | 
+      always() && 
+      (needs.terraform_plan.result == 'success') &&
+      (needs.terraform_apply.result == 'success'|| needs.terraform_apply.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and tag image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0' # Don't fail the pipeline
+      
+      - name: Upload Trivy scan
+        uses: actions/upload-artifact@v6
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+
+  push-image:
+    name: "Push to ECR"
+    needs: [terraform_apply, build-and-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG

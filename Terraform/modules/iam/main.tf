@@ -26,6 +26,12 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm_managed" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# Attach the Managed Policy for Session Manager (SSM)
+resource "aws_iam_role_policy_attachment" "ec2_container_registry" {
+  role       = aws_iam_role.ec2_instance_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
 # Instance Profile
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "${var.project_name}-instance-profile"

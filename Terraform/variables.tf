@@ -50,10 +50,17 @@ variable "db_engine_version" {
 
 variable "app_port" {
   description = "NodeJs Port"
+  type        = string
 }
 
 variable "https_port" {
   description = "HTTPS Port"
+  type        = string
+}
+
+variable "http_port" {
+  description = "HTTPS Port"
+  type        = string
 }
 
 variable "default_route" {
@@ -88,5 +95,35 @@ variable "volume_type" {
 
 variable "instance_type" {
   description = "EC2 instance type"
+  type        = string
+}
+
+variable "bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
+}
+
+variable "ssl_policy" {
+  description = "ALB SSL Policy"
+  type        = string
+}
+
+variable "loadbalancer_type" {
+  description = "ELB Type"
+  type        = string
+}
+
+variable "target_type" {
+  description = "Target Type for EC2 Target Group"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "value"
+  type        = string
+}
+
+variable "repo_name" {
+  description = "ECR Repo Name"
   type        = string
 }

@@ -1,8 +1,3 @@
-output "rds_endpoint" {
-  description = "Endpoint of the RDS instance"
-  value       = aws_db_instance.main.endpoint
-}
-
 output "rds_port" {
   description = "RDS Port for MySQL"
   value       = aws_db_instance.main.port
@@ -18,6 +13,11 @@ output "rds_master_secret_arn" {
   value       = aws_db_instance.main.master_user_secret[0].secret_arn
 }
 
+output "rds_secret_name" {
+  description = "RDS Master Secret Name"
+  value       = local.rds_secret_name
+}
+
 output "rds_proxy_prx_id" {
   description = "RDS Proxy ID"
   value       = local.rds_proxy_prx_id
@@ -31,4 +31,14 @@ output "rds_proxy_arn" {
 output "rds_proxy_endpoint" {
   description = "RDS Proxy ARN"
   value       = aws_db_proxy.devdb_proxy.endpoint
+}
+
+output "rds_address" {
+  description = "RDS Address"
+  value       = aws_db_instance.main.address
+}
+
+output "rds_db_name" {
+  description = "RDS DB Name"
+  value       = aws_db_instance.main.db_name
 }
