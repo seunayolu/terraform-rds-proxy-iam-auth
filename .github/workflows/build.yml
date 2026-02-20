@@ -82,6 +82,7 @@ jobs:
           path: Terraform/tfplan
       
       - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -160,37 +161,31 @@ jobs:
 
   build-and-scan:
     name: "Build & Scan Image"
-    needs: [terraform_plan, terraform_apply]
-    if: | 
-      always() && 
-      (needs.terraform_plan.result == 'success') &&
-      (needs.terraform_apply.result == 'success'|| needs.terraform_apply.result == 'skipped')
+    needs: [terraform_plan]
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ secrets.ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v6
+      #   with:
+      #     role-to-assume: ${{ secrets.ROLE_ARN }}
+      #     aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      # - name: Login to Amazon ECR
+      #   id: login-ecr
+      #   uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and tag image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
+          docker build -t nodeapp:${{ github.sha }} .
 
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ needs.terraform_apply.outputs.ecr_repo_name || vars.REPO_NAME}}:${{ github.sha }}
+          image-ref: nodeapp:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
@@ -202,9 +197,9 @@ jobs:
           name: trivy-results
           path: trivy-results.sarif
 
-  push-image:
+  build-and-push-image:
     name: "Push to ECR"
-    needs: [terraform_apply, build-and-scan]
+    needs: [terraform_apply]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -227,5 +222,5 @@ jobs:
           ECR_REPOSITORY: ${{ needs.terraform_apply.outputs.ecr_repo_name }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
