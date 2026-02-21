@@ -27,7 +27,6 @@ fi
 
 # --- Step 2: Retrieve Master Credentials ---
 echo "Step 2: Retrieving Master Credentials from Secrets Manager..."
-# Note: Using single quotes around the secret ID to prevent Bash expansion of '!'
 SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_NAME" --region "$REGION" --query SecretString --output text 2>/dev/null)
 
 if [[ $? -ne 0 ]]; then
@@ -70,6 +69,9 @@ echo "Step 5: Creating App Users using IAM Token..."
 mysql -h "$RDS_ENDPOINT" --user="$IAM_ADMIN_USER" --password="$TOKEN" --ssl-ca="$CERT_PATH" --ssl-verify-server-cert <<EOF
 CREATE USER IF NOT EXISTS 'node_app'@'%' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
 CREATE USER IF NOT EXISTS 'node_user'@'%' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
+
+ALTER USER 'node_user'@'%' REQUIRE SSL;
+ALTER USER 'node_app'@'%' REQUIRE SSL;
 
 GRANT SELECT, CREATE, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_app'@'%';
 GRANT SELECT, CREATE, INSERT, UPDATE, DELETE ON \`$DB_NAME\`.* TO 'node_user'@'%';

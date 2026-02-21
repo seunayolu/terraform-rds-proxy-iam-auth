@@ -24,6 +24,7 @@ permissions:
 jobs:
   terraform_plan:
     name: "Terraform Plan & Security Scan"
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -140,7 +141,11 @@ jobs:
           path: Terraform/
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan > apply_output.txt
+        run: terraform apply -no-color -auto-approve tfplan
+        working-directory: Terraform/
+
+      - name: Generate Terraform Output file
+        run: terraform output -no-color >> apply_output.txt
         working-directory: Terraform/
       
       - name: Upload Apply Output
@@ -240,5 +245,5 @@ jobs:
         working-directory: Terraform/
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve
+        run: terraform destroy -no-color -auto-approve
         working-directory: Terraform/
