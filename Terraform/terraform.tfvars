@@ -25,7 +25,7 @@ volume_type   = "gp3"
 vpc_cidr      = "172.20.0.0/16"
 default_route = "0.0.0.0/0"
 publicip-01   = "129.222.205.51/32"
-publicip-02   = "102.88.112.120/32"
+publicip-02   = "102.88.112.225/32"
 
 # S3 variables
 bucket_name = "rds-iam-auth-alb-logs"
