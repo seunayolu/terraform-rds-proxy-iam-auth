@@ -1,4 +1,4 @@
-# AWS RDS End-to-End IAM Authentication via RDS Proxy
+# AWS RDS Proxy End-to-End IAM Authentication (Zero-Secret Architecture)
 
 [![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/docs/latest-v23.x/api/)
 [![AWS Cloud](https://img.shields.io/badge/AWS-Cloud-FF9900?logo=amazon-aws&logoColor=white)](https://docs.aws.amazon.com/)
@@ -9,33 +9,107 @@
 [![SSM Parameter](https://img.shields.io/badge/AWS_Systems_Manager-Configuration-FF9900?logo=amazon-aws&logoColor=white)](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html/)
 [![Terraform](https://img.shields.io/badge/Terraform-1.12.2-623CE4?logo=terraform&logoColor=white)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_proxy/)
 
-This repository contains a **Terraform** project that implements a fully automated, **Zero-Secret** (IAM-based) architecture for Amazon RDS. It covers the entire lifecycle from VPC networking and High-Availability NAT Gateways to the automated bootstrapping of database users via AWS Lambda.
+## Overview
 
-## 🏗️ Architecture Overview
+This project implements a fully automated, end-to-end IAM authentication
+flow between:
 
-The project follows a "Least Privilege" security model where no long-lived database credentials are stored within the application environment.
+-   A Node.js application\
+-   Amazon RDS Proxy\
+-   Amazon RDS (MySQL)
 
-* **Compute:** EC2 Instance running a Node.js application in a private subnet.
-* **Database:** Amazon RDS (MySQL) with IAM Database Authentication enabled.
-* **Proxy:** Amazon RDS Proxy acting as the IAM-to-DB bridge.
-* **Authentication:** * **App to Proxy:** Native IAM Authentication using `rds-db:connect`.
-* **Proxy to DB:** Native IAM Authentication + Secrets Manager (Master Secret) for backend pooling.
+The architecture eliminates long-lived database credentials and enforces
+short-lived IAM-based authentication from the application layer to the
+database.
 
+All infrastructure is provisioned using a modular Terraform
+architecture, and CI/CD is implemented using GitHub Actions with OIDC
+federation.
 
-* **Automation:** AWS Lambda function to bootstrap the `AWSAuthenticationPlugin` users in MySQL upon deployment.
+## 🏗 Architecture Modules
 
----
+    modules/
+     ├── vpc/
+     ├── iam/
+     ├── ec2/
+     ├── rds/
+     ├── security_group/
+     ├── alb/
+     ├── s3/
+     └── ecr/
 
-## 🚀 Key Features
+## Authentication Flow
 
-* **Regional High Availability:** Multi-AZ VPC deployment with one NAT Gateway per Availability Zone for fault tolerance.
-* **Secretless App Environment:** Applications use the AWS SDK to generate short-lived IAM tokens; no DB passwords are saved in SSM or Environment Variables.
-* **Automated Bootstrapping:** Includes a Python-based Lambda function that automatically creates the required MySQL users (`IDENTIFIED WITH AWSAuthenticationPlugin`) during the initial Terraform apply.
-* **Dynamic IAM Policies:** Automatically extracts the **Proxy Resource ID** (`prx-xxx`) and **DBI Resource ID** (`db-xxx`) from ARNs to build precise `rds-db:connect` policies.
+### 1️⃣ App → Proxy
 
----
+Application generates short-lived IAM token:
 
-## 🔍 The "Hidden" API Challenge
+``` bash
+aws rds generate-db-auth-token     --hostname <proxy-endpoint>     --port 3306     --region us-east-1     --username node_app
+```
+
+### 2️⃣ Proxy → RDS
+
+-   Uses RDS-managed master secret (Secrets Manager)
+-   Backend pooling handled by RDS Proxy
+-   MySQL users configured with AWSAuthenticationPlugin
+
+## Database Bootstrap Strategy
+
+A secure shell-based bootstrap script:
+
+1.  Reads generated `rds.conf`
+2.  Retrieves master credentials from Secrets Manager
+3.  Creates IAM-enabled admin user
+4.  Switches to IAM authentication
+5.  Creates application users
+6.  Enforces SSL
+7.  Grants least-privilege permissions
+
+Example SQL:
+
+``` sql
+CREATE USER 'node_app'@'%'
+IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
+
+ALTER USER 'node_app'@'%' REQUIRE SSL;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON node_db.* TO 'node_app'@'%';
+```
+
+## CI/CD Pipeline (GitHub Actions)
+
+### Pull Request
+
+-   Terraform validate
+-   TFLint
+-   Checkov scan
+-   Terraform plan
+-   Docker build
+-   Trivy scan
+
+### Push to Main
+
+-   Terraform apply
+-   Extract outputs
+-   Upload rds.conf artifact
+-   Build & push image to ECR
+-   OIDC-based AWS authentication
+
+### Manual Trigger
+
+-   Terraform destroy
+
+## Security Highlights
+
+-   OIDC federation (no static AWS keys)
+-   No DB passwords stored in environment variables
+-   SSL enforced at MySQL level
+-   Least privilege IAM policies
+-   Terraform static analysis
+-   Container image scanning
+
+## The "Hidden" API Challenge
 
 A core highlight of this project is the resolution of a documented contradiction in the AWS RDS API.
 
@@ -43,23 +117,67 @@ A core highlight of this project is the resolution of a documented contradiction
 
 **The Solution:** This project demonstrates how to satisfy the AWS API validator by linking the RDS Master User Secret (managed by RDS) while still enforcing a 100% IAM-based flow for the application.
 
----
+# Bash Conditional Flags Reference
 
-## 🛠️ Tech Stack
+  -----------------------------------------------------------------------
+  Flag          Meaning              Common Use Case
+  ------------- -------------------- ------------------------------------
+  `-z`          Zero length: True if `[[ -z "$DB_PASSWORD" ]]` (Check if
+                the string is empty  a secret is missing)
 
-* **Infrastructure:** Terraform
-* **Provider:** AWS
-* **Database:** MySQL 8.4.7
-* **Compute:** Ubuntu 24.04 (Noble Numbat)
-* **Containerization:** Docker (Alpine-based Node 23)
-* **Automation:** Python 3.12 (Lambda)
+  `-n`          Non-zero length:     `[[ -n "$GIT_TAG" ]]` (Check if a
+                True if string is    version exists)
+                NOT empty            
 
-## 📝 Lessons Learned
+  `-e`          Exists: True if file `[[ -e "tfplan" ]]` (Check if plan
+                or directory exists  file was created)
 
-* **The 80/20 Rule:** 80% of DevOps is navigating the nuances of API behavior; 20% is writing the actual code.
-* **Provider Quirk:** The `aws_db_proxy` resource ID in Terraform returns the *name*, but IAM policies require the *Resource ID*. This project uses `split()` and `element()` functions to dynamically extract the correct ID from the ARN.
+  `-f`          File: Exists and is  `[[ -f "rds.conf" ]]` (Verify config
+                regular file         file exists)
 
-## ALB Logging to S3
+  `-d`          Directory: Exists    `[[ -d "Terraform/" ]]` (Verify
+                and is directory     directory structure)
+
+  `-x`          Executable: File     `[[ -x "./deploy.sh" ]]` (Check
+                exists and           script permissions)
+                executable           
+  -----------------------------------------------------------------------
+
+----------------------------------------------------------------------------
+# Bash Safety Mode (Error Handling in CI/CD)
+
+In production-grade scripts, always enable safety mode:
+
+``` bash
+set -euxo pipefail
+```
+
+## Explanation of Flags
+
+### `set -e` (errexit)
+
+Exit immediately if a command fails. Prevents execution from continuing
+after failures like `terraform init`.
+
+### `set -u` (nounset)
+
+Treat unset variables as errors. Prevents dangerous expansions like:
+
+    rm -rf /$UNDEFINED_VAR
+
+### `set -o pipefail`
+
+If any command in a pipeline fails, the entire pipeline fails. Ensures
+hidden failures don't pass silently.
+
+### `set -x` (xtrace)
+
+Prints each command before execution. Extremely useful for debugging
+GitHub Actions logs.
+
+## Useful links and commands
+
+### ALB Logging to S3
 - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
 - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/describe-ssl-policies.html
 - https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-creating.html
@@ -108,8 +226,14 @@ aws ssm start-session \
 ```
 
 ```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 442042522885.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account_id>.dkr.ecr.us-east-1.amazonaws.com
 ```
 
+## 🏁 Final Result
 
+-   End-to-end IAM authentication
+-   Zero long-lived secrets
+-   Fully automated provisioning
+-   Secure DevSecOps pipeline
+-   Modular Terraform architecture
 
