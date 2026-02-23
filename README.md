@@ -143,6 +143,7 @@ A core highlight of this project is the resolution of a documented contradiction
                 executable           
   -----------------------------------------------------------------------
 
+----------------------------------------------------------------------------
 # Bash Safety Mode (Error Handling in CI/CD)
 
 In production-grade scripts, always enable safety mode:
